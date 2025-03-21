@@ -3,7 +3,6 @@ import math
 import subprocess
 import sys
 
-# Check if running in Colab
 def is_colab():
     try:
         import IPython
@@ -20,7 +19,8 @@ def install_font():
         print(f"Failed to install font: {e}")
         return None
 
-def add_badge(image_path, output_path, badge_type="opentowork", invert=False, rotation=0, debug=False, inner_radius_offset=0):
+def add_badge(image_path, output_path, badge_text="#OPENTOWORK", invert=False, 
+             rotation=0, debug=False, inner_radius_offset=0, badge_color=(147, 112, 219)):
     img = Image.open(image_path).convert("RGBA")
     width, height = img.size
     print(f"Image dimensions: {width}x{height}")
@@ -28,34 +28,22 @@ def add_badge(image_path, output_path, badge_type="opentowork", invert=False, ro
     badge = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(badge)
 
-    if badge_type.lower() == "opentowork":
-        color_base = (70, 112, 49)  # #467031 - LinkedIn green
-        text = "#OPENTOWORK"
-    else:  # dontwantowork
-        color_base = (199, 49, 49)  # #C73131 - Red
-        text = "#DONTWANTOWORK"
+    badge_width = int(min(width, height) * 0.1392)
+    default_inner_radius = min(width, height) // 2 - badge_width
+    inner_radius = default_inner_radius + inner_radius_offset
+    outer_radius = inner_radius + badge_width
 
-    badge_width = int(min(width, height) * 0.1392)  # Fixed thickness
-    default_inner_radius = min(width, height) // 2 - badge_width  # Default inner radius
-    inner_radius = default_inner_radius + inner_radius_offset  # Adjustable distance from center
-    outer_radius = inner_radius + badge_width  # Outer edge moves with inner_radius
-    print(f"Badge width: {badge_width}, Outer radius: {outer_radius}, Inner radius: {inner_radius}")
+    center_x = width // 2 + 40
+    center_y = height // 2 - 50
 
-    center_x = width // 2 + 50
-    center_y = height // 2 + 80
-
-    # Define arc in counterclockwise degrees from 0° (positive x-axis)
     base_start_angle = 150
     base_end_angle = 350
-    
-    # Apply rotation
     start_angle = (base_start_angle + rotation) % 360
     end_angle = (base_end_angle + rotation) % 360
     steps = 1000
 
-    # Adjust direction based on invert
     if invert:
-        start_angle, end_angle = end_angle, start_angle  # Reverse to clockwise
+        start_angle, end_angle = end_angle, start_angle
 
     angle_range = end_angle - start_angle
     fade_percentage = 0.05
@@ -70,9 +58,9 @@ def add_badge(image_path, output_path, badge_type="opentowork", invert=False, ro
             alpha = int(255 * ((1 - t) / fade_percentage))
         else:
             alpha = 255
-        color = (*color_base, alpha)
+        color = (*badge_color, alpha)
         rad = math.radians(angle % 360)
-        x = center_x + (inner_radius + badge_width / 2) * math.cos(rad)  # Midpoint of badge
+        x = center_x + (inner_radius + badge_width / 2) * math.cos(rad)
         y = center_y + (inner_radius + badge_width / 2) * math.sin(rad)
         draw.ellipse(
             [(x - badge_width // 2, y - badge_width // 2),
@@ -80,15 +68,12 @@ def add_badge(image_path, output_path, badge_type="opentowork", invert=False, ro
             fill=color
         )
 
-    # Draw angle indicator lines if debug is True (swapped colors)
     if debug:
-        # Yellow line for start_angle (text ends here)
         start_rad = math.radians(start_angle % 360)
         start_x = center_x + outer_radius * math.cos(start_rad)
         start_y = center_y + outer_radius * math.sin(start_rad)
         draw.line([(center_x, center_y), (start_x, start_y)], fill=(255, 255, 0, 255), width=5)
 
-        # Blue line for end_angle (text starts here)
         end_rad = math.radians(end_angle % 360)
         end_x = center_x + outer_radius * math.cos(end_rad)
         end_y = center_y + outer_radius * math.sin(end_rad)
@@ -98,48 +83,29 @@ def add_badge(image_path, output_path, badge_type="opentowork", invert=False, ro
     font_path = install_font()
     font = ImageFont.truetype(font_path, desired_font_size) if font_path else ImageFont.load_default()
 
-    test_img = Image.new("RGBA", (desired_font_size * 2, desired_font_size * 2), (0, 0, 0, 0))
-    test_draw = ImageDraw.Draw(test_img)
-    test_draw.text((desired_font_size, desired_font_size), "O", font=font, fill=(255, 255, 255, 255), anchor="mm")
-    bbox = test_img.getbbox()
-    rendered_height = (bbox[3] - bbox[1]) if bbox else 8
-
-    if rendered_height < desired_font_size * 0.5:
-        render_font_size = 12
-        font = ImageFont.load_default()
-        scaling_factor = 100 / rendered_height
-    else:
-        render_font_size = desired_font_size
-        scaling_factor = 1.0
-
-    text_radius = inner_radius + (badge_width / 2)  # Center text within badge
+    text_radius = inner_radius + (badge_width / 2)
     arc_fill_percentage = 0.9
     text_angle_span = angle_range * arc_fill_percentage
-    text_length = len(text)
+    text_length = len(badge_text)
     angle_per_char = text_angle_span / (text_length - 1) if text_length > 1 else 0
-    
-    # Text direction: from end_angle (blue) to start_angle (yellow)
-    mid_angle = (start_angle + end_angle) / 2
-    start_text_angle = mid_angle + (angle_per_char * (text_length - 1)) / 2  # Start at end_angle side
-    angle_per_char = -angle_per_char  # Move toward start_angle
 
-    for i, char in enumerate(text):
+    mid_angle = (start_angle + end_angle) / 2
+    start_text_angle = mid_angle + (angle_per_char * (text_length - 1)) / 2
+    angle_per_char = -angle_per_char
+
+    for i, char in enumerate(badge_text):
         char_angle = start_text_angle + i * angle_per_char
         rad = math.radians(char_angle % 360)
         x = center_x + text_radius * math.cos(rad)
         y = center_y + text_radius * math.sin(rad)
 
-        char_size = int(render_font_size * 2.5)
+        char_size = int(desired_font_size * 2.5)
         char_img = Image.new("RGBA", (char_size, char_size), (0, 0, 0, 0))
         char_draw = ImageDraw.Draw(char_img)
         char_draw.text((char_size // 2, char_size // 2), char, font=font, fill=(255, 255, 255, 255), anchor="mm")
 
-        if scaling_factor != 1.0:
-            new_size = (int(char_img.width * scaling_factor), int(char_img.height * scaling_factor))
-            char_img = char_img.resize(new_size, resample=Image.BICUBIC)
-
-        rotation = (char_angle - 90) if not invert else (char_angle + 90)  # Flip orientation
-        rotation += 180  # Inside circle adjustment
+        rotation = (char_angle - 90) if not invert else (char_angle + 90)
+        rotation += 180
         char_img = char_img.rotate(-rotation, expand=True, resample=Image.BICUBIC)
 
         char_width, char_height = char_img.size
@@ -150,18 +116,27 @@ def add_badge(image_path, output_path, badge_type="opentowork", invert=False, ro
     result = Image.alpha_composite(img, badge)
     result.save(output_path, "PNG")
     print(f"Image saved as {output_path}")
+    return result
 
-def main():
-    input_image = "moa_sans_lunettes_bw_centered.jpeg"
-    output_image = "moa_with_badge.png"
-    add_badge(input_image, output_image, badge_type="dontwantowork", invert=True, rotation=70, debug=False, inner_radius_offset=50)
+def process_image():
+    # Define parameters once
+    params = {
+        'image_path': "moa_sans_lunettes.jpeg",
+        'output_path': "moa_with_badge.png",
+        'badge_text': "#INFINITY&BEYOND",
+        'invert': True,
+        'rotation': 70,
+        'debug': False,
+        'inner_radius_offset': 50,
+        'badge_color': (147, 112, 219)
+    }
 
-if is_colab():
-    from IPython.display import Image as IPyImage, display
-    input_image = "moa_sans_lunettes_bw_centered.jpeg"
-    output_image = "moa_with_badge.png"
-    add_badge(input_image, output_image, badge_type="dontwantowork", invert=True, rotation=70, debug=False, inner_radius_offset=50)
-    display(IPyImage(output_image))
-else:
-    if __name__ == "__main__":
-        main()
+    # Execute based on environment
+    result = add_badge(**params)
+    
+    if is_colab():
+        from IPython.display import Image as IPyImage, display
+        display(IPyImage(params['output_path']))
+
+if __name__ == "__main__":
+    process_image()
